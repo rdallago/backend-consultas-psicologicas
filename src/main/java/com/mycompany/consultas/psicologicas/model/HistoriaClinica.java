@@ -1,43 +1,28 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package com.mycompany.consultas.psicologicas.model;
-
-/**
- *
- * @author Informatica
- */
 
 import jakarta.persistence.*;
 import java.time.LocalDate;
+import java.util.List;
 
 @Entity
-@Table(name = "historias_clinicas")
+@Table(name = "historia_clinica")
 public class HistoriaClinica {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Relación con paciente
-    @ManyToOne
-    @JoinColumn(name = "paciente_id", nullable = false)
+    // 👇 ACA VA EL JOIN COLUMN
+    @OneToOne
+    @JoinColumn(name = "paciente_id")
     private Paciente paciente;
 
-    // Relación con turno (opcional)
-    @ManyToOne
-    @JoinColumn(name = "turno_id")
-    private Turno turno;
+    private LocalDate fechaCreacion;
 
-    private LocalDate fecha;
+    @OneToMany(mappedBy = "historia", cascade = CascadeType.ALL)
+    private List<Visita> visitas;
 
-    @Column(columnDefinition = "TEXT")
-    private String observaciones;
-
-    // =========================
     // GETTERS Y SETTERS
-    // =========================
 
     public Long getId() {
         return id;
@@ -55,27 +40,19 @@ public class HistoriaClinica {
         this.paciente = paciente;
     }
 
-    public Turno getTurno() {
-        return turno;
+    public LocalDate getFechaCreacion() {
+        return fechaCreacion;
     }
 
-    public void setTurno(Turno turno) {
-        this.turno = turno;
+    public void setFechaCreacion(LocalDate fechaCreacion) {
+        this.fechaCreacion = fechaCreacion;
     }
 
-    public LocalDate getFecha() {
-        return fecha;
+    public List<Visita> getVisitas() {
+        return visitas;
     }
 
-    public void setFecha(LocalDate fecha) {
-        this.fecha = fecha;
-    }
-
-    public String getObservaciones() {
-        return observaciones;
-    }
-
-    public void setObservaciones(String observaciones) {
-        this.observaciones = observaciones;
+    public void setVisitas(List<Visita> visitas) {
+        this.visitas = visitas;
     }
 }

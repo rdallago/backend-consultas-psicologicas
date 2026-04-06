@@ -1,13 +1,3 @@
-
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
-
-/**
- *
- * @author Informatica
- */
 package com.mycompany.consultas.psicologicas.model;
 
 import jakarta.persistence.*;
@@ -23,18 +13,14 @@ public class Paciente {
 
     private String nombre;
     private String apellido;
-
-    @Column(unique = true)
     private String dni;
-
     private String email;
     private String telefono;
     private String direccion;
-
     private LocalDate fechaNacimiento;
 
-    @Column(columnDefinition = "TEXT")
-    private String observaciones;
+    @OneToOne(mappedBy = "paciente", cascade = CascadeType.ALL)
+    private HistoriaClinica historiaClinica;
 
     // GETTERS Y SETTERS
 
@@ -76,5 +62,37 @@ public class Paciente {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getTelefono() {
+        return telefono;
+    }
+
+    public void setTelefono(String telefono) {
+        this.telefono = telefono;
+    }
+
+    public String getDireccion() {
+        return direccion;
+    }
+
+    public void setDireccion(String direccion) {
+        this.direccion = direccion;
+    }
+
+    public LocalDate getFechaNacimiento() {
+        return fechaNacimiento;
+    }
+
+    public void setFechaNacimiento(LocalDate fechaNacimiento) {
+        this.fechaNacimiento = fechaNacimiento;
+    }
+
+    public HistoriaClinica getHistoriaClinica() {
+        return historiaClinica;
+    }
+
+    public void setHistoriaClinica(HistoriaClinica historiaClinica) {
+        this.historiaClinica = historiaClinica;
     }
 }

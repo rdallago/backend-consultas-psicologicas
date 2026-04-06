@@ -1,43 +1,27 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package com.mycompany.consultas.psicologicas.service;
-
-/**
- *
- * @author Informatica
- */
-
-import com.mycompany.consultas.psicologicas.model.HistoriaClinica;
-import com.mycompany.consultas.psicologicas.repository.HistoriaClinicaRepository;
-import com.mycompany.consultas.psicologicas.exception.RecursoNoEncontradoException;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-
+import com.mycompany.consultas.psicologicas.model.HistoriaClinica;
+import com.mycompany.consultas.psicologicas.repository.HistoriaClinicaRepository;
 import java.util.List;
+
+import java.util.Optional;
 
 @Service
 public class HistoriaClinicaService {
 
     @Autowired
-    private HistoriaClinicaRepository historiaRepository;
+    private HistoriaClinicaRepository repository;
 
-    public List<HistoriaClinica> listar() {
-        return historiaRepository.findAll();
+    public HistoriaClinica crear(HistoriaClinica hc) {
+        return repository.save(hc);
     }
 
-    public HistoriaClinica guardar(HistoriaClinica h) {
-        return historiaRepository.save(h);
+    public Optional<HistoriaClinica> buscarPorPaciente(Long pacienteId) {
+        return repository.findByPacienteId(pacienteId);
     }
-
-    public HistoriaClinica obtenerPorId(Long id) {
-        return historiaRepository.findById(id)
-            .orElseThrow(() -> new RecursoNoEncontradoException("Historia clínica no encontrada"));
-    }
-
-    public void eliminar(Long id) {
-        historiaRepository.deleteById(id);
+     public List<HistoriaClinica> listar() {
+        return repository.findAll();
     }
 }

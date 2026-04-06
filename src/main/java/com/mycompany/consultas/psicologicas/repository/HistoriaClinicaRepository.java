@@ -1,18 +1,13 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Interface.java to edit this template
- */
 package com.mycompany.consultas.psicologicas.repository;
 
-/**
- *
- * @author Informatica
- */
-import com.mycompany.consultas.psicologicas.model.HistoriaClinica;
 import org.springframework.data.jpa.repository.JpaRepository;
+import com.mycompany.consultas.psicologicas.model.HistoriaClinica;
+
+import java.util.Optional;
 
 public interface HistoriaClinicaRepository extends JpaRepository<HistoriaClinica, Long> {
 
-    // ✔ verificar si tiene historia clínica
+    Optional<HistoriaClinica> findByPacienteId(Long pacienteId);
+
     boolean existsByPacienteId(Long pacienteId);
 }

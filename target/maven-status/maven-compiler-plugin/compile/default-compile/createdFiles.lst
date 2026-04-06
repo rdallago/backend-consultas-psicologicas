@@ -1,3 +1,4 @@
+com\mycompany\consultas\psicologicas\service\VisitaService.class
 com\mycompany\consultas\psicologicas\model\Turno.class
 com\mycompany\consultas\psicologicas\repository\HistoriaClinicaRepository.class
 com\mycompany\consultas\psicologicas\model\EstadoTurno.class
@@ -5,6 +6,8 @@ com\mycompany\consultas\psicologicas\controller\PacienteController.class
 com\mycompany\consultas\psicologicas\service\PacienteService.class
 com\mycompany\consultas\psicologicas\service\TurnoService.class
 com\mycompany\consultas\psicologicas\repository\PacienteRepository.class
+com\mycompany\consultas\psicologicas\controller\VisitaController.class
+com\mycompany\consultas\psicologicas\repository\VisitaRepository.class
 com\mycompany\consultas\psicologicas\model\HistoriaClinica.class
 com\mycompany\consultas\psicologicas\controller\TurnoController.class
 com\mycompany\consultas\psicologicas\exception\ErrorResponse.class
@@ -15,3 +18,4 @@ com\mycompany\consultas\psicologicas\controller\HistoriaClinicaController.class
 com\mycompany\consultas\psicologicas\exception\GlobalExceptionHandler.class
 com\mycompany\consultas\psicologicas\ConsultasPsicologicasApplication.class
 com\mycompany\consultas\psicologicas\exception\RecursoNoEncontradoException.class
+com\mycompany\consultas\psicologicas\model\Visita.class
