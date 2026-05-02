@@ -1,5 +1,5 @@
 package com.mycompany.consultas.psicologicas.model;
-
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.util.List;
@@ -15,6 +15,7 @@ public class HistoriaClinica {
     // 👇 ACA VA EL JOIN COLUMN
     @OneToOne
     @JoinColumn(name = "paciente_id")
+    @JsonBackReference
     private Paciente paciente;
 
     private LocalDate fechaCreacion;

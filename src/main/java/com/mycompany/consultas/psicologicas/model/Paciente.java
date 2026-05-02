@@ -1,5 +1,5 @@
 package com.mycompany.consultas.psicologicas.model;
-
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 
@@ -20,6 +20,7 @@ public class Paciente {
     private LocalDate fechaNacimiento;
 
     @OneToOne(mappedBy = "paciente", cascade = CascadeType.ALL)
+    @JsonManagedReference
     private HistoriaClinica historiaClinica;
 
     // GETTERS Y SETTERS

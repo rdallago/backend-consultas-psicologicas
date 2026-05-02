@@ -47,19 +47,16 @@ public Paciente obtenerPorId(Long id) {
             .orElseThrow(() -> new RecursoNoEncontradoException("Paciente no encontrado"));
 }
 
-    public void eliminar(Long id) {
+public void eliminar(Long id) {
 
-        // ❌ validar historia clínica
-        if (historiaRepository.existsByPacienteId(id)) {
-            throw new RuntimeException("No se puede eliminar: el paciente tiene historia clínica");
-        }
-
-        // ❌ validar turnos asistidos
-        if (turnoRepository.existsByPacienteIdAndEstado(id, EstadoTurno.ASISTIO)) {
-            throw new RuntimeException("No se puede eliminar: el paciente tiene turnos asistidos");
-        }
-
-        // ✔ si pasa validaciones, elimina
-        pacienteRepository.deleteById(id);
+    if (historiaRepository.contarHistoriasPorPaciente(id) > 0) {
+        throw new RuntimeException("No se puede eliminar: el paciente tiene historia clínica");
     }
+
+    if (turnoRepository.countByPacienteIdAndEstado(id, EstadoTurno.ASISTIO) > 0) {
+        throw new RuntimeException("No se puede eliminar: el paciente tiene turnos asistidos");
+    }
+
+    pacienteRepository.deleteById(id);
+}
 }

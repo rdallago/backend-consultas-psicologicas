@@ -2,6 +2,7 @@ package com.mycompany.consultas.psicologicas.model;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import com.mycompany.consultas.psicologicas.model.EstadoTurno;
 
 @Entity
 @Table(name = "turnos")
@@ -17,7 +18,8 @@ public class Turno {
 
     private LocalDateTime fechaHora;
 
-    private String estado;
+   @Enumerated(EnumType.STRING)
+   private EstadoTurno estado;
 
     // GETTERS Y SETTERS
 
@@ -45,11 +47,11 @@ public class Turno {
         this.fechaHora = fechaHora;
     }
 
-    public String getEstado() {
-        return estado;
-    }
+   public EstadoTurno getEstado() {
+    return estado;
+}
 
-    public void setEstado(String estado) {
-        this.estado = estado;
-    }
+public void setEstado(EstadoTurno estado) {
+    this.estado = estado;
+}
 }
