@@ -1,5 +1,7 @@
 package com.mycompany.consultas.psicologicas.model;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 
@@ -13,10 +15,12 @@ public class Visita {
 
     @ManyToOne
     @JoinColumn(name = "historia_id")
+    @JsonBackReference
     private HistoriaClinica historia;
 
     @ManyToOne
     @JoinColumn(name = "turno_id")
+    @JsonIgnoreProperties({"paciente"})
     private Turno turno;
 
     private LocalDate fecha;

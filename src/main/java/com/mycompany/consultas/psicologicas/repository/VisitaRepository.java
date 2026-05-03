@@ -8,4 +8,5 @@ import java.util.List;
 public interface VisitaRepository extends JpaRepository<Visita, Long> {
 
     List<Visita> findByHistoriaId(Long historiaId);
+    boolean existsByTurnoId(Long turnoId);
 }

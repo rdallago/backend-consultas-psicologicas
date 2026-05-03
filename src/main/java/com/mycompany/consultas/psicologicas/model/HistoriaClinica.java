@@ -1,5 +1,7 @@
 package com.mycompany.consultas.psicologicas.model;
+
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.util.List;
@@ -12,7 +14,6 @@ public class HistoriaClinica {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // 👇 ACA VA EL JOIN COLUMN
     @OneToOne
     @JoinColumn(name = "paciente_id")
     @JsonBackReference
@@ -21,6 +22,7 @@ public class HistoriaClinica {
     private LocalDate fechaCreacion;
 
     @OneToMany(mappedBy = "historia", cascade = CascadeType.ALL)
+    @JsonManagedReference
     private List<Visita> visitas;
 
     // GETTERS Y SETTERS

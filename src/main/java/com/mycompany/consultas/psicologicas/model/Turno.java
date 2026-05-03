@@ -1,8 +1,8 @@
 package com.mycompany.consultas.psicologicas.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
-import com.mycompany.consultas.psicologicas.model.EstadoTurno;
 
 @Entity
 @Table(name = "turnos")
@@ -14,13 +14,13 @@ public class Turno {
 
     @ManyToOne
     @JoinColumn(name = "paciente_id")
+    @JsonIgnoreProperties({"historiaClinica"})
     private Paciente paciente;
 
     private LocalDateTime fechaHora;
 
-   @Enumerated(EnumType.STRING)
-   private EstadoTurno estado;
-
+    @Enumerated(EnumType.STRING)
+    private EstadoTurno estado;
     // GETTERS Y SETTERS
 
     public Long getId() {
@@ -47,11 +47,11 @@ public class Turno {
         this.fechaHora = fechaHora;
     }
 
-   public EstadoTurno getEstado() {
-    return estado;
-}
+    public EstadoTurno getEstado() {
+        return estado;
+    }
 
-public void setEstado(EstadoTurno estado) {
-    this.estado = estado;
-}
+    public void setEstado(EstadoTurno estado) {
+        this.estado = estado;
+    }
 }

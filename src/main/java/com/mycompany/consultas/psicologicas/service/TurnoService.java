@@ -4,7 +4,7 @@ import com.mycompany.consultas.psicologicas.exception.RecursoNoEncontradoExcepti
 import com.mycompany.consultas.psicologicas.model.EstadoTurno;
 import com.mycompany.consultas.psicologicas.model.Turno;
 import com.mycompany.consultas.psicologicas.repository.TurnoRepository;
-
+import com.mycompany.consultas.psicologicas.repository.VisitaRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +17,9 @@ public class TurnoService {
 
     @Autowired
     private TurnoRepository turnoRepository;
+
+    @Autowired
+    private VisitaRepository visitaRepository;
 
     // ===============================
     // LISTAR TODOS
@@ -87,9 +90,20 @@ public class TurnoService {
     // ===============================
     // ELIMINAR
     // ===============================
-    public void eliminar(Long id) {
-        turnoRepository.deleteById(id);
+  public void eliminar(Long id) {
+
+    if (!turnoRepository.existsById(id)) {
+        throw new RuntimeException("El turno no existe.");
     }
+
+    if (visitaRepository.existsByTurnoId(id)) {
+        throw new RuntimeException(
+            "No se puede eliminar el turno porque posee una visita asociada."
+        );
+    }
+
+    turnoRepository.deleteById(id);
+}
 
     // ===============================
     // VALIDAR 40 MINUTOS ENTRE TURNOS

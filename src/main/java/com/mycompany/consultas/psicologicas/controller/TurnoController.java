@@ -5,6 +5,7 @@ import com.mycompany.consultas.psicologicas.model.Turno;
 import com.mycompany.consultas.psicologicas.service.TurnoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
 
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -33,12 +34,12 @@ public class TurnoController {
         return turnoService.guardar(turno);
     }
 
-   @PutMapping("/{id}")
-public Turno modificar(@PathVariable Long id,
-                       @RequestBody Turno turno) {
+    @PutMapping("/{id}")
+    public Turno modificar(@PathVariable Long id,
+                           @RequestBody Turno turno) {
 
-    return turnoService.actualizar(id, turno);
-}
+        return turnoService.actualizar(id, turno);
+    }
 
     @PutMapping("/{id}/estado/{estado}")
     public Turno cambiarEstado(@PathVariable Long id,
@@ -47,11 +48,33 @@ public Turno modificar(@PathVariable Long id,
         return turnoService.cambiarEstado(id, estado);
     }
 
+   
+    
     @DeleteMapping("/{id}")
-    public void eliminar(@PathVariable Long id) {
-        turnoService.eliminar(id);
-    }
+public ResponseEntity<String> eliminar(@PathVariable Long id) {
 
+    try {
+
+        turnoService.eliminar(id);
+
+        return ResponseEntity.ok("Turno eliminado");
+
+    } catch (RuntimeException e) {
+
+        return ResponseEntity
+                .status(400)
+                .body(e.getMessage());
+
+    } catch (Exception e) {
+
+        return ResponseEntity
+                .status(500)
+                .body("Error interno al eliminar turno");
+    }
+}
+    
+    
+    
     @GetMapping("/mes/{anio}/{mes}")
     public List<Turno> turnosDelMes(@PathVariable int anio,
                                     @PathVariable int mes) {
@@ -59,7 +82,7 @@ public Turno modificar(@PathVariable Long id,
         YearMonth ym = YearMonth.of(anio, mes);
 
         LocalDateTime desde = ym.atDay(1).atStartOfDay();
-        LocalDateTime hasta = ym.atEndOfMonth().atTime(23,59);
+        LocalDateTime hasta = ym.atEndOfMonth().atTime(23, 59);
 
         return turnoService.buscarEntreFechas(desde, hasta);
     }
