@@ -1,8 +1,9 @@
 package com.mycompany.consultas.psicologicas.model;
 
-import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import jakarta.persistence.*;
+
 import java.time.LocalDate;
 
 @Entity
@@ -13,22 +14,63 @@ public class Visita {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // =========================
+    // HISTORIA CLINICA
+    // =========================
+
     @ManyToOne
-    @JoinColumn(name = "historia_id")
-    @JsonBackReference
+    @JoinColumn(name = "historia_id", nullable = false)
+    @JsonIgnoreProperties({
+            "visitas",
+            "paciente"
+    })
     private HistoriaClinica historia;
 
-    @ManyToOne
-    @JoinColumn(name = "turno_id")
-    @JsonIgnoreProperties({"paciente"})
-    private Turno turno;
+    // =========================
+    // TURNO
+    // =========================
 
+    @OneToOne
+@JoinColumn(
+        name = "turno_id",
+        unique = true
+)
+private Turno turno;
+    
+    @JsonIgnoreProperties({
+            "historiaClinica",
+           "visitas",
+         "hibernateLazyInitializer",
+            "handler"
+    })
+    
+    // =========================
+    // FECHA
+    // =========================
+    @Column(nullable = false)
     private LocalDate fecha;
 
-    @Column(columnDefinition = "TEXT")
+    // =========================
+    // OBSERVACION
+    // =========================
+
+    @Lob
+    @Column(columnDefinition = "LONGTEXT")
     private String observacion;
 
+    // =========================
+    // RESUMEN IA
+    // =========================
+
+    @Lob
+    @Column(name = "resumen_ia", columnDefinition = "LONGTEXT")
+    private String resumenIa;
+
+    private String estadoIa;
+
+    // =========================
     // GETTERS Y SETTERS
+    // =========================
 
     public Long getId() {
         return id;
@@ -68,5 +110,21 @@ public class Visita {
 
     public void setObservacion(String observacion) {
         this.observacion = observacion;
+    }
+
+    public String getResumenIa() {
+        return resumenIa;
+    }
+
+    public void setResumenIa(String resumenIa) {
+        this.resumenIa = resumenIa;
+    }
+
+    public String getEstadoIa() {
+        return estadoIa;
+    }
+
+    public void setEstadoIa(String estadoIa) {
+        this.estadoIa = estadoIa;
     }
 }

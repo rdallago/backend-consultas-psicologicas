@@ -1,8 +1,9 @@
 package com.mycompany.consultas.psicologicas.model;
 
-import com.fasterxml.jackson.annotation.JsonManagedReference;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import jakarta.persistence.*;
+
 import java.time.LocalDate;
 
 @Entity
@@ -21,11 +22,17 @@ public class Paciente {
     private String direccion;
     private LocalDate fechaNacimiento;
 
+    // =========================
+    // HISTORIA CLINICA
+    // =========================
+
     @OneToOne(mappedBy = "paciente", cascade = CascadeType.ALL)
-    @JsonManagedReference
+    @JsonIgnore
     private HistoriaClinica historiaClinica;
 
+    // =========================
     // GETTERS Y SETTERS
+    // =========================
 
     public Long getId() {
         return id;

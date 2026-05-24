@@ -1,8 +1,12 @@
 package com.mycompany.consultas.psicologicas.model;
 
-import com.fasterxml.jackson.annotation.JsonBackReference;
-import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import jakarta.persistence.*;
+
+import org.springframework.format.annotation.DateTimeFormat;
+
 import java.time.LocalDate;
 import java.util.List;
 
@@ -14,18 +18,43 @@ public class HistoriaClinica {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // =========================
+    // PACIENTE
+    // =========================
+
     @OneToOne
     @JoinColumn(name = "paciente_id")
-    @JsonBackReference
+    @JsonIgnoreProperties({
+            "historiaClinica"
+    })
     private Paciente paciente;
 
+    // =========================
+    // FECHA CREACION
+    // =========================
+
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     private LocalDate fechaCreacion;
 
-    @OneToMany(mappedBy = "historia", cascade = CascadeType.ALL)
-    @JsonManagedReference
+    // =========================
+    // VISITAS
+    // =========================
+
+    @OneToMany(
+            mappedBy = "historia",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true
+    )
+    @OrderBy("fecha ASC")
+    @JsonIgnoreProperties({
+            "historia"
+    })
     private List<Visita> visitas;
 
+    // =========================
     // GETTERS Y SETTERS
+    // =========================
 
     public Long getId() {
         return id;
