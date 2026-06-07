@@ -114,4 +114,14 @@ public Visita editar(
     ) {
         return service.buscarPorFecha(fecha);
     }
+    
+  @GetMapping("/es-primera/{pacienteId}")
+public boolean esPrimera(
+        @PathVariable Long pacienteId
+) {
+
+    return service.esPrimeraVisita(
+            pacienteId
+    );
+}
 }

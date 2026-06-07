@@ -24,6 +24,8 @@ public class IaService {
 @Value("${openrouter.api.key}")
 private String openrouterApiKey;
 
+
+
     // =========================================
     // REST TEMPLATE
     // =========================================
@@ -423,4 +425,181 @@ Texto:
             }
         }
     }
+
+public String generarHistoriaClinica(
+        List<Visita> visitas
+) {
+
+    try {
+
+        if (
+                visitas == null ||
+                visitas.isEmpty()
+        ) {
+
+            return "Sin registros clínicos.";
+        }
+
+        // =====================================
+        // CONCATENAR OBSERVACIONES
+        // =====================================
+
+        String texto = visitas.stream()
+
+                .map(Visita::getObservacion)
+
+                .filter(v ->
+                        v != null &&
+                        !v.isBlank()
+                )
+
+                .map(v ->
+
+                        v.replaceAll("<[^>]*>", " ")
+                         .replace("&nbsp;", " ")
+                         .replaceAll("\\s+", " ")
+                         .trim()
+                )
+
+                .reduce(
+                        "",
+                        (a, b) -> a + "\n" + b
+                );
+
+        if (texto.isBlank()) {
+
+            return "Sin contenido clínico.";
+        }
+
+        // =====================================
+        // PROMPT
+        // =====================================
+
+        String prompt = """
+Generá una historia clínica psicológica profesional
+basada EXCLUSIVAMENTE en las siguientes visitas.
+
+Reglas:
+- no inventar diagnósticos
+- no agregar medicación
+- usar lenguaje clínico profesional
+- resumir evolución emocional y conductual
+- detectar patrones relevantes
+- máximo 250 palabras
+- redactar como informe clínico
+- no usar viñetas
+
+Visitas:
+%s
+""".formatted(texto);
+
+        // =====================================
+        // HEADERS
+        // =====================================
+
+        HttpHeaders headers =
+                new HttpHeaders();
+
+        headers.setContentType(
+                MediaType.APPLICATION_JSON
+        );
+
+        headers.setBearerAuth(openrouterApiKey);
+
+        // =====================================
+        // BODY OPENROUTER
+        // =====================================
+
+        Map<String, Object> body = Map.of(
+
+                "model", "deepseek/deepseek-chat",
+
+                "messages", List.of(
+
+                        Map.of(
+                                "role", "user",
+                                "content", prompt
+                        )
+                ),
+
+                "temperature", 0.3,
+
+                "max_tokens", 300
+        );
+
+        HttpEntity<Map<String, Object>> request =
+                new HttpEntity<>(
+                        body,
+                        headers
+                );
+
+        // =====================================
+        // REQUEST
+        // =====================================
+        ResponseEntity<Map> response =
+        restTemplate.postForEntity(
+                "https://openrouter.ai/api/v1/chat/completions",
+                request,
+                Map.class
+        );
+
+        if (response.getBody() == null) {
+
+            return "No se pudo generar historia clínica.";
+        }
+
+        // =====================================
+        // EXTRAER RESPUESTA
+        // =====================================
+
+        List<Map<String, Object>> choices =
+                (List<Map<String, Object>>)
+                        response.getBody().get("choices");
+
+        if (
+                choices == null ||
+                choices.isEmpty()
+        ) {
+
+            return "Sin respuesta IA.";
+        }
+
+        Map<String, Object> message =
+                (Map<String, Object>)
+                        choices.get(0).get("message");
+
+        String resumen =
+                message.get("content")
+                        .toString()
+                        .trim();
+
+        // =====================================
+        // LIMPIEZA
+        // =====================================
+
+        resumen = resumen
+
+                .replace("*", "")
+
+                .replace("#", "")
+
+                .replaceAll("\\s+", " ")
+
+                .trim();
+
+        if (!resumen.endsWith(".")) {
+
+            resumen += ".";
+        }
+
+        return resumen;
+
+    } catch (Exception e) {
+
+        e.printStackTrace();
+
+        return "No se pudo generar historia clínica.";
+    }
+}
+
 }

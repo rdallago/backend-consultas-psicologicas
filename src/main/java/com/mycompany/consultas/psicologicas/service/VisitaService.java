@@ -59,6 +59,8 @@ public class VisitaService {
                     "Debe seleccionar un turno"
             );
         }
+        
+        
 
         Turno turno = turnoRepo.findById(
                 visita.getTurno().getId()
@@ -142,6 +144,22 @@ public class VisitaService {
         // GUARDAR VISITA
         // =========================
 
+            if (visita.getTipoVisita() == null) {
+
+        boolean yaExistePrimera =
+            visitaRepo.existsByHistoriaIdAndTipoVisita(
+                historia.getId(),
+                TipoVisita.PRIMERA_ENTREVISTA
+            );
+
+        if (!yaExistePrimera) {
+            
+      
+            visita.setTipoVisita(TipoVisita.PRIMERA_ENTREVISTA);
+        } else {
+            visita.setTipoVisita(TipoVisita.SEGUIMIENTO);
+        }
+    }
         Visita guardada = visitaRepo.save(visita);
         guardada.setEstadoIa("PROCESANDO");
         visitaRepo.save(guardada);
@@ -168,139 +186,135 @@ public class VisitaService {
     // EDITAR
     // =========================
 
-    public Visita editar(Long id, Visita datos) {
+   public Visita editar(Long id, Visita datos) {
 
-        Visita visita = visitaRepo.findCompletaById(id)
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "Visita inexistente"
-                        )
-                );
-
-        // =========================
-        // VALIDAR OBSERVACION
-        // =========================
-
-        if (
-                datos.getObservacion() == null ||
-                datos.getObservacion().trim().isEmpty()
-        ) {
-
-            throw new RuntimeException(
-                    "La observación es obligatoria"
+    Visita visita = visitaRepo.findCompletaById(id)
+            .orElseThrow(() ->
+                    new RuntimeException("Visita inexistente")
             );
-        }
 
-        // =========================
-// REGENERAR IA SI:
-// - CAMBIO OBSERVACION
-// - O EXISTE RESUMEN VIEJO
+    // =====================================
+    // VALIDAR OBSERVACION
+    // =====================================
+
+    if (datos.getObservacion() == null ||
+        datos.getObservacion().trim().isEmpty()) {
+
+        throw new RuntimeException("La observación es obligatoria");
+    }
+
+    // =========================
+// DETERMINAR TIPO DE VISITA (SOLO EN CREACIÓN)
 // =========================
 
-boolean observacionCambio =
-        !datos.getObservacion().trim().equals(
-                visita.getObservacion() != null
-                        ? visita.getObservacion().trim()
-                        : ""
-        );
+/*if (visita.getTipoVisita() == null) {
 
-boolean regenerarIa =
-        observacionCambio
-        ||
-        visita.getResumenIa() != null;
-
-        // =========================
-        // ACTUALIZAR OBSERVACION
-        // =========================
-
-        visita.setObservacion(
-                datos.getObservacion()
-        );
-
-        // =========================
-        // MANTENER FECHA DEL TURNO
-        // =========================
-
-        if (
-                visita.getTurno() != null &&
-                visita.getTurno().getFechaHora() != null
-        ) {
-
-            visita.setFecha(
-                    visita.getTurno()
-                            .getFechaHora()
-                            .toLocalDate()
+    boolean yaExistePrimera =
+            visitaRepo.existsByHistoriaIdAndTipoVisita(
+                    historia.getId(),
+                    TipoVisita.PRIMERA_ENTREVISTA
             );
-        }
 
-        // =========================
-        // REGENERAR IA SI CAMBIO
-        // =========================
-            if (regenerarIa) {
+    if (!yaExistePrimera) {
+        visita.setTipoVisita(TipoVisita.PRIMERA_ENTREVISTA);
+    } else {
+        visita.setTipoVisita(TipoVisita.SEGUIMIENTO);
+    }
+}*/
 
-                visita.setEstadoIa("PROCESANDO");
+// =====================================
+// NO MODIFICAR TIPO DE VISITA EN EDICIÓN
+// =====================================
+    // =====================================
+    // DETECTAR CAMBIO OBSERVACION
+    // =====================================
 
-                visita.setResumenIa(null);
-            }
+    boolean observacionCambio =
+            !datos.getObservacion().trim().equals(
+                    visita.getObservacion() != null
+                            ? visita.getObservacion().trim()
+                            : ""
+            );
 
-        // =========================
-        // GUARDAR
-        // =========================
+    boolean regenerarIa =
+            observacionCambio || visita.getResumenIa() != null;
 
-        Visita actualizada = visitaRepo.save(visita);
+    // =====================================
+    // ACTUALIZAR OBSERVACION
+    // =====================================
 
-        // =========================
-        // IA ASINCRONA
-        // =========================
+    visita.setObservacion(datos.getObservacion());
 
-        if (regenerarIa) {
+    // mantener fecha del turno
+    if (visita.getTurno() != null &&
+        visita.getTurno().getFechaHora() != null) {
 
-          iaService.resumirObservacionAsync(
-                  actualizada.getId(),
-                  actualizada.getObservacion()
-          );
-      }
+        visita.setFecha(
+                visita.getTurno()
+                        .getFechaHora()
+                        .toLocalDate()
+        );
+    }
+
+    // =====================================
+    // IA
+    // =====================================
+
+    if (regenerarIa) {
+
+        visita.setEstadoIa("PROCESANDO");
+        visita.setResumenIa(null);
+    }
+
+    Visita actualizada = visitaRepo.save(visita);
+
+    if (regenerarIa) {
+
+        iaService.resumirObservacionAsync(
+                actualizada.getId(),
+                actualizada.getObservacion()
+        );
+    }
+
     return actualizada;
 }
     // =========================
     // ELIMINAR
     // =========================
 
-    public void eliminar(Long id) {
+   public void eliminar(Long id) {
 
-        Visita visita = visitaRepo.findCompletaById(id)
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "Visita inexistente"
-                        )
-                );
-
-        // =========================
-        // GUARDAR REFERENCIA TURNO
-        // =========================
-
-        Turno turno = visita.getTurno();
-
-        // =========================
-        // ELIMINAR VISITA
-        // =========================
-
-        visitaRepo.delete(visita);
-
-        // =========================
-        // RESTAURAR TURNO
-        // =========================
-
-        if (turno != null) {
-
-            turno.setEstado(
-                    EstadoTurno.AGENDADO
+    Visita visita = visitaRepo.findCompletaById(id)
+            .orElseThrow(() ->
+                    new RuntimeException("Visita inexistente")
             );
 
-            turnoRepo.save(turno);
-        }
-    }
+    // =========================
+    // GUARDAR REFERENCIA TURNO
+    // =========================
 
+    Turno turno = visita.getTurno();
+
+    // =========================
+    // ELIMINAR VISITA
+    // =========================
+
+    visitaRepo.delete(visita);
+
+    // =========================
+    // RESTAURAR TURNO A AGENDADO
+    // PARA CUALQUIER TIPO DE VISITA
+    // =========================
+
+    if (turno != null) {
+
+        turno.setEstado(
+                EstadoTurno.AGENDADO
+        );
+
+        turnoRepo.save(turno);
+    }
+}
     // =========================
     // BUSCAR
     // =========================
@@ -400,11 +414,9 @@ boolean regenerarIa =
 
        com.itextpdf.text.Image logo =
         com.itextpdf.text.Image.getInstance(
-                "src/main/resources/static/brain.png"
-        );
+                getClass().getResource("/static/brain.png"));
 
 logo.scaleToFit(40, 40);
-
 izquierda.addElement(logo);
 
 Paragraph nombreSistema =
@@ -575,6 +587,22 @@ izquierda.addElement(nombreSistema);
                 "Error generando PDF"
         );
     }
+}
+    
+   public boolean esPrimeraVisita(Long pacienteId) {
+
+    HistoriaClinica historia = historiaRepo
+            .findByPacienteId(pacienteId)
+            .orElseThrow(() ->
+                    new RuntimeException(
+                            "Historia clínica inexistente"
+                    )
+            );
+
+    return !visitaRepo.existsByHistoriaIdAndTipoVisita(
+            historia.getId(),
+            TipoVisita.PRIMERA_ENTREVISTA
+    );
 }
     
 }

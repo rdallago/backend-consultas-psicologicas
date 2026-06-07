@@ -21,4 +21,5 @@ public interface HistoriaClinicaRepository
 @Query("DELETE FROM HistoriaClinica h WHERE h.id = :id")
 void eliminarHistoria(@Param("id") Long id);
 
+
 }

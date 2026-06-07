@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.mycompany.consultas.psicologicas.model.Visita;
-
+import com.mycompany.consultas.psicologicas.model.TipoVisita;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
@@ -96,4 +96,6 @@ public interface VisitaRepository
     ORDER BY v.fecha DESC
     """)
     List<Visita> buscarPorFecha(LocalDate fecha);
+    
+    boolean existsByHistoriaIdAndTipoVisita(Long historiaId, TipoVisita tipoVisita);
 }

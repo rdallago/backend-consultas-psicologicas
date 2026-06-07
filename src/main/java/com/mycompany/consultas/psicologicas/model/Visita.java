@@ -13,6 +13,25 @@ public class Visita {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tipo_visita")
+    private TipoVisita tipoVisita;
+
+    public void setTipoVisita(TipoVisita tipoVisita) {
+        this.tipoVisita = tipoVisita;
+    }
+
+    public TipoVisita getTipoVisita() {
+        return tipoVisita;
+    }
+    
+    @PrePersist
+public void prePersist() {
+    if (tipoVisita == null) {
+        tipoVisita = TipoVisita.SEGUIMIENTO;
+    }
+}
 
     // =========================
     // HISTORIA CLINICA

@@ -38,6 +38,13 @@ public class HistoriaClinica {
     private LocalDate fechaCreacion;
 
     // =========================
+    // HISTORIA CLINICA 
+    // =========================
+
+    @Column(columnDefinition = "LONGTEXT")
+    private String resumenClinico;
+    
+    // =========================
     // VISITAS
     // =========================
 
@@ -87,4 +94,12 @@ public class HistoriaClinica {
     public void setVisitas(List<Visita> visitas) {
         this.visitas = visitas;
     }
+    
+    public String getResumenClinico() {
+    return resumenClinico;
+}
+
+public void setResumenClinico(String resumenClinico) {
+    this.resumenClinico = resumenClinico;
+}
 }

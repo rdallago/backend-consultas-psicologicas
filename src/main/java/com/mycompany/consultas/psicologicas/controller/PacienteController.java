@@ -8,7 +8,7 @@
  * @author Informatica
  */
 package com.mycompany.consultas.psicologicas.controller;
-
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,10 +18,15 @@ import com.mycompany.consultas.psicologicas.service.PacienteService;
 import java.util.List;
 
 @RestController
-@RequestMapping("/pacientes")
+@RequestMapping("/api/pacientes")
 @CrossOrigin
 public class PacienteController {
+    @GetMapping("/test")
+    public String test() {
 
+        return new BCryptPasswordEncoder()
+                .encode("1234");
+    }
     @Autowired
     private PacienteService pacienteService;
 
@@ -39,6 +44,8 @@ public class PacienteController {
 public Paciente obtener(@PathVariable Long id) {
     return pacienteService.obtenerPorId(id);
 }
+
+
 
     @PutMapping("/{id}")
     public Paciente actualizar(@PathVariable Long id, @RequestBody Paciente p) {
