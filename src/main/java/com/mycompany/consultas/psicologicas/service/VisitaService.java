@@ -126,9 +126,8 @@ public class VisitaService {
         // ESTADO IA INICIAL
         // =========================
 
-        visita.setEstadoIa("PENDIENTE");
-
-        visita.setResumenIa(null);
+            visita.setEstadoIa("NO_SOLICITADO");
+            visita.setResumenIa(null);
 
         // =========================
         // CAMBIAR ESTADO TURNO
@@ -144,49 +143,33 @@ public class VisitaService {
         // GUARDAR VISITA
         // =========================
 
-            if (visita.getTipoVisita() == null) {
+            // El tipo se determina siempre desde las visitas ya registradas.
+            // Nunca confiar en el tipo enviado por el navegador.
+            boolean tieneVisitasPrevias = visitaRepo.existsByHistoriaId(historia.getId());
+            visita.setTipoVisita(tieneVisitasPrevias
+                    ? TipoVisita.SEGUIMIENTO
+                    : TipoVisita.PRIMERA_ENTREVISTA);
 
-        boolean yaExistePrimera =
-            visitaRepo.existsByHistoriaIdAndTipoVisita(
-                historia.getId(),
-                TipoVisita.PRIMERA_ENTREVISTA
-            );
+        // El origen de la organización es independiente del resumen opcional.
+        boolean primera = visita.getTipoVisita() == TipoVisita.PRIMERA_ENTREVISTA;
+        boolean organizada = primera && Boolean.TRUE.equals(visita.getOrganizadaConIa());
+        validarContenidoPrimeraEntrevista(visita.getObservacion(), primera);
+        visita.setOrganizadaConIa(organizada);
 
-        if (!yaExistePrimera) {
-            
-      
-            visita.setTipoVisita(TipoVisita.PRIMERA_ENTREVISTA);
-        } else {
-            visita.setTipoVisita(TipoVisita.SEGUIMIENTO);
-        }
-    }
         Visita guardada = visitaRepo.save(visita);
-        guardada.setEstadoIa("PROCESANDO");
-        visitaRepo.save(guardada);
-
-        // =========================
-        // GENERAR IA ASINCRONA
-        // =========================
-
-        if (
-                guardada.getObservacion() != null &&
-                !guardada.getObservacion().isBlank()
-        ) {
-
-            iaService.resumirObservacionAsync(
-                    guardada.getId(),
-                    guardada.getObservacion()
-            );
-        }
 
         return guardada;
+
     }
+// =========================
+// EDITAR
+// =========================
 
-    // =========================
-    // EDITAR
-    // =========================
+public Visita editar(Long id, Visita datos) {
 
-   public Visita editar(Long id, Visita datos) {
+    // =====================================
+    // BUSCAR VISITA EXISTENTE
+    // =====================================
 
     Visita visita = visitaRepo.findCompletaById(id)
             .orElseThrow(() ->
@@ -200,33 +183,22 @@ public class VisitaService {
     if (datos.getObservacion() == null ||
         datos.getObservacion().trim().isEmpty()) {
 
-        throw new RuntimeException("La observación es obligatoria");
+        throw new RuntimeException(
+                "La observación es obligatoria"
+        );
     }
 
-    // =========================
-// DETERMINAR TIPO DE VISITA (SOLO EN CREACIÓN)
-// =========================
+    validarContenidoPrimeraEntrevista(datos.getObservacion(),
+            visita.getTipoVisita() == TipoVisita.PRIMERA_ENTREVISTA);
 
-/*if (visita.getTipoVisita() == null) {
-
-    boolean yaExistePrimera =
-            visitaRepo.existsByHistoriaIdAndTipoVisita(
-                    historia.getId(),
-                    TipoVisita.PRIMERA_ENTREVISTA
-            );
-
-    if (!yaExistePrimera) {
-        visita.setTipoVisita(TipoVisita.PRIMERA_ENTREVISTA);
-    } else {
-        visita.setTipoVisita(TipoVisita.SEGUIMIENTO);
+    // Mantener el origen de la entrevista, sin aceptar que una edición lo borre.
+    if (visita.getTipoVisita() == TipoVisita.PRIMERA_ENTREVISTA
+            && Boolean.TRUE.equals(datos.getOrganizadaConIa())) {
+        visita.setOrganizadaConIa(true);
     }
-}*/
 
-// =====================================
-// NO MODIFICAR TIPO DE VISITA EN EDICIÓN
-// =====================================
     // =====================================
-    // DETECTAR CAMBIO OBSERVACION
+    // DETECTAR CAMBIO EN LA OBSERVACION
     // =====================================
 
     boolean observacionCambio =
@@ -236,16 +208,16 @@ public class VisitaService {
                             : ""
             );
 
-    boolean regenerarIa =
-            observacionCambio || visita.getResumenIa() != null;
-
     // =====================================
     // ACTUALIZAR OBSERVACION
     // =====================================
 
     visita.setObservacion(datos.getObservacion());
 
-    // mantener fecha del turno
+    // =====================================
+    // MANTENER FECHA DEL TURNO
+    // =====================================
+
     if (visita.getTurno() != null &&
         visita.getTurno().getFechaHora() != null) {
 
@@ -257,27 +229,44 @@ public class VisitaService {
     }
 
     // =====================================
-    // IA
+    // RESUMEN IA OPCIONAL
     // =====================================
 
-    if (regenerarIa) {
+    // Si cambió la observación, el resumen anterior
+    // deja de corresponder al contenido actualizado.
 
-        visita.setEstadoIa("PROCESANDO");
+    if (observacionCambio) {
+
         visita.setResumenIa(null);
+        visita.setEstadoIa("NO_SOLICITADO");
     }
 
-    Visita actualizada = visitaRepo.save(visita);
+    // =====================================
+    // GUARDAR VISITA SIN GENERAR IA
+    // =====================================
 
-    if (regenerarIa) {
-
-        iaService.resumirObservacionAsync(
-                actualizada.getId(),
-                actualizada.getObservacion()
-        );
-    }
-
-    return actualizada;
+    return visitaRepo.save(visita);
 }
+    // Rechazar plantillas vacías: la plantilla contiene numerosas preguntas
+    // en cursiva, pero ninguna respuesta clínica. Se admiten ediciones manuales.
+    private void validarContenidoPrimeraEntrevista(String html, boolean primera) {
+        if (!primera) return;
+        if (html == null || html.isBlank()) {
+            throw new IllegalArgumentException("La primera entrevista no puede estar vacía");
+        }
+        boolean contienePlantilla = html.contains("ENTREVISTA CLÍNICA INICIAL")
+                && html.contains("Datos de identificación")
+                && html.contains("Seguridad y riesgo");
+        boolean respuestaIa = html.matches("(?s).*class=[\"']respuesta-entrevista[\"'][^>]*>\\s*[^<\\s].*");
+        boolean preguntasSinRespuestas = contienePlantilla
+                && !respuestaIa
+                && html.split("<em>", -1).length > 10;
+        if (preguntasSinRespuestas) {
+            throw new IllegalArgumentException(
+                    "La primera entrevista parece contener solo la plantilla. Completá las respuestas antes de guardar.");
+        }
+    }
+
     // =========================
     // ELIMINAR
     // =========================
@@ -337,259 +326,34 @@ public class VisitaService {
         );
     }
     public byte[] generarPdf(Long id) {
-
-    try {
-
         Visita visita = visitaRepo.findCompletaById(id)
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "Visita inexistente"
-                        )
-                );
-
-        ByteArrayOutputStream baos =
-                new ByteArrayOutputStream();
-
-        Document document =
-                new Document();
-
-        PdfWriter.getInstance(
-                document,
-                baos
-        );
-
-        document.open();
-
-        // =========================
-        // FUENTES
-        // =========================
-
-        Font titulo =
-                FontFactory.getFont(
-                        FontFactory.HELVETICA_BOLD,
-                        18,
-                        BaseColor.BLACK
-                );
-
-        Font encabezado =
-                FontFactory.getFont(
-                        FontFactory.HELVETICA_BOLD,
-                        20,
-                        BaseColor.BLACK
-                );
-
-        Font texto =
-                FontFactory.getFont(
-                        FontFactory.HELVETICA,
-                        12,
-                        BaseColor.BLACK
-                );
-
-        Font fechaFont =
-                FontFactory.getFont(
-                        FontFactory.HELVETICA,
-                        10,
-                        BaseColor.DARK_GRAY
-                );
-
-        // =========================
-        // ENCABEZADO
-        // =========================
-
-        com.itextpdf.text.pdf.PdfPTable tablaEncabezado =
-                new com.itextpdf.text.pdf.PdfPTable(2);
-
-        tablaEncabezado.setWidthPercentage(100);
-
-        tablaEncabezado.setWidths(new float[]{70, 30});
-
-        // =========================
-        // IZQUIERDA
-        // =========================
-
-        com.itextpdf.text.pdf.PdfPCell izquierda =
-                new com.itextpdf.text.pdf.PdfPCell();
-
-        izquierda.setBorder(0);
-
-       com.itextpdf.text.Image logo =
-        com.itextpdf.text.Image.getInstance(
-                getClass().getResource("/static/brain.png"));
-
-logo.scaleToFit(40, 40);
-izquierda.addElement(logo);
-
-Paragraph nombreSistema =
-        new Paragraph(
-                "Gestión Psicológica",
-                encabezado
-        );
-
-izquierda.addElement(nombreSistema);
-        // =========================
-        // DERECHA
-        // =========================
-
-        java.time.format.DateTimeFormatter formatter =
-                java.time.format.DateTimeFormatter.ofPattern(
-                        "dd/MM/yyyy HH:mm"
-                );
-
-        String fechaHora =
-                java.time.LocalDateTime.now()
-                        .format(formatter);
-
-        com.itextpdf.text.pdf.PdfPCell derecha =
-                new com.itextpdf.text.pdf.PdfPCell();
-
-        derecha.setBorder(0);
-
-        Paragraph fechaParrafo =
-                new Paragraph(
-                        "Generado: " + fechaHora,
-                        fechaFont
-                );
-
-        fechaParrafo.setAlignment(
-                com.itextpdf.text.Element.ALIGN_RIGHT
-        );
-
-        derecha.addElement(fechaParrafo);
-
-        // =========================
-        // AGREGAR TABLA
-        // =========================
-
-        tablaEncabezado.addCell(izquierda);
-
-        tablaEncabezado.addCell(derecha);
-
-        document.add(tablaEncabezado);
-
-        document.add(new Paragraph(" "));
-
-        // =========================
-        // TITULO
-        // =========================
-
-        Paragraph tituloPdf =
-                new Paragraph(
-                        "Registro de Visita Clínica",
-                        titulo
-                );
-
-        tituloPdf.setAlignment(
-                com.itextpdf.text.Element.ALIGN_CENTER
-        );
-
-        document.add(tituloPdf);
-
-        document.add(new Paragraph(" "));
-
-        // =========================
-        // PACIENTE
-        // =========================
-
-        String paciente =
-                visita.getHistoria()
-                        .getPaciente()
-                        .getNombre()
-                + " "
-                +
-                visita.getHistoria()
-                        .getPaciente()
-                        .getApellido();
-
-        document.add(
-                new Paragraph(
-                        "Paciente: " + paciente,
-                        texto
-                )
-        );
-
-        // =========================
-        // FECHA
-        // =========================
-
-        document.add(
-                new Paragraph(
-                        "Fecha de visita: "
-                        + visita.getFecha(),
-                        texto
-                )
-        );
-
-        document.add(new Paragraph(" "));
-
-        // =========================
-        // OBSERVACION
-        // =========================
-
-        document.add(
-                new Paragraph(
-                        "Observación clínica:",
-                        titulo
-                )
-        );
-
-        String observacionLimpia =
-                visita.getObservacion()
-
-                        // eliminar tags HTML
-                        .replaceAll("<[^>]*>", " ")
-
-                        // espacios html
-                        .replace("&nbsp;", " ")
-
-                        // limpiar espacios múltiples
-                        .replaceAll("\\s+", " ")
-
-                        .trim();
-
-        document.add(
-                new Paragraph(
-                        observacionLimpia,
-                        texto
-                )
-        );
-
-        document.add(new Paragraph(" "));
-
-        // =========================
-        // RESUMEN IA
-        // =========================
-
-        document.add(
-                new Paragraph(
-                        "Resumen IA:",
-                        titulo
-                )
-        );
-
-        document.add(
-                new Paragraph(
-                        visita.getResumenIa() != null
-                                ? visita.getResumenIa()
-                                : "Sin resumen IA",
-                        texto
-                )
-        );
-
-        document.close();
-
-        return baos.toByteArray();
-
-    } catch (Exception e) {
-
-        e.printStackTrace();
-
-        throw new RuntimeException(
-                "Error generando PDF"
-        );
+                .orElseThrow(() -> new RuntimeException("Visita inexistente"));
+        try {
+            ByteArrayOutputStream salida = new ByteArrayOutputStream();
+            Document documento = PdfClinicoFormato.documento();
+            PdfWriter.getInstance(documento, salida);
+            documento.open();
+            String paciente = visita.getHistoria().getPaciente().getNombre() + " "
+                    + visita.getHistoria().getPaciente().getApellido();
+            String tipo = visita.getTipoVisita() == TipoVisita.PRIMERA_ENTREVISTA
+                    ? "Primera entrevista clínica" : "Visita de seguimiento";
+            PdfClinicoFormato.cabecera(documento, tipo, paciente,
+                    "Fecha de visita: " + (visita.getFecha() == null ? "Sin fecha" : visita.getFecha().toString()));
+            PdfClinicoFormato.seccion(documento, "Registro de la entrevista");
+            PdfClinicoFormato.contenido(documento, visita.getObservacion());
+            if (visita.getResumenIa() != null && !visita.getResumenIa().isBlank()) {
+                PdfClinicoFormato.seccion(documento, "Resumen IA");
+                PdfClinicoFormato.contenido(documento, visita.getResumenIa());
+            }
+            documento.close();
+            return salida.toByteArray();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Error generando PDF de visita", e);
+        }
     }
-}
-    
-   public boolean esPrimeraVisita(Long pacienteId) {
+
+public boolean esPrimeraVisita(Long pacienteId) {
 
     HistoriaClinica historia = historiaRepo
             .findByPacienteId(pacienteId)
@@ -599,10 +363,7 @@ izquierda.addElement(nombreSistema);
                     )
             );
 
-    return !visitaRepo.existsByHistoriaIdAndTipoVisita(
-            historia.getId(),
-            TipoVisita.PRIMERA_ENTREVISTA
-    );
+    return !visitaRepo.existsByHistoriaId(historia.getId());
 }
     
 }

@@ -124,4 +124,74 @@ public boolean esPrimera(
             pacienteId
     );
 }
+// =====================================
+// GENERAR RESUMEN IA DE UNA VISITA
+// (SOLO CUANDO EL PSICOLOGO LO SOLICITA)
+// =====================================
+
+@PostMapping("/{id}/generar-resumen-ia")
+public ResponseEntity<?> generarResumenIa(
+        @PathVariable Long id
+) {
+
+    Visita visita = visitaRepository.findById(id)
+            .orElseThrow(() ->
+                    new RuntimeException("Visita inexistente")
+            );
+
+    // Validar que exista una observación
+    if (visita.getObservacion() == null ||
+            visita.getObservacion().trim().isEmpty()) {
+
+        return ResponseEntity.badRequest()
+                .body(
+                        java.util.Map.of(
+                                "error",
+                                "La visita no tiene observación para resumir"
+                        )
+                );
+    }
+
+    try {
+
+        // Generar resumen solamente a pedido
+        String resumen = iaService.resumirObservacion(
+                visita.getObservacion()
+        );
+
+        // No guardar respuestas vacías ni mensajes de error
+        if (resumen == null ||
+                resumen.isBlank() ||
+                resumen.equalsIgnoreCase("Resumen clínico no disponible.") ||
+                resumen.equalsIgnoreCase("Síntesis clínica no concluyente.") ||
+                resumen.equalsIgnoreCase("Sin observaciones clínicas.")) {
+
+            return ResponseEntity.internalServerError()
+                    .body(
+                            java.util.Map.of(
+                                    "error",
+                                    "No se pudo generar un resumen clínico válido"
+                            )
+                    );
+        }
+
+        // Guardar resumen en la visita
+        visita.setResumenIa(resumen);
+        visita.setEstadoIa("OK");
+
+        Visita actualizada = visitaRepository.save(visita);
+
+        return ResponseEntity.ok(actualizada);
+
+    } catch (Exception e) {
+
+        return ResponseEntity.internalServerError()
+                .body(
+                        java.util.Map.of(
+                                "error",
+                                "No se pudo generar el resumen IA"
+                        )
+                );
+    }
+}
 }

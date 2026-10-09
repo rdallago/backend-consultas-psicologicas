@@ -17,6 +17,17 @@ public class Visita {
     @Enumerated(EnumType.STRING)
     @Column(name = "tipo_visita")
     private TipoVisita tipoVisita;
+    
+    @Column(name = "organizada_con_ia", nullable = false)
+    private Boolean organizadaConIa = false;
+
+    public Boolean getOrganizadaConIa() {
+        return organizadaConIa;
+    }
+
+    public void setOrganizadaConIa(Boolean organizadaConIa) {
+        this.organizadaConIa = organizadaConIa;
+    }
 
     public void setTipoVisita(TipoVisita tipoVisita) {
         this.tipoVisita = tipoVisita;

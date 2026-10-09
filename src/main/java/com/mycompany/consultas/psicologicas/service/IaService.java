@@ -4,6 +4,8 @@ import com.mycompany.consultas.psicologicas.model.Visita;
 import com.mycompany.consultas.psicologicas.repository.VisitaRepository;
 
 import java.util.List;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +25,19 @@ public class IaService {
 
 @Value("${openrouter.api.key}")
 private String openrouterApiKey;
+
+@Value("${groq.api.key}")
+private String groqApiKey;
+
+@Value("${ia.historia-clinica.modelos:openrouter/free}")
+private String modelosHistoriaClinica;
+
+@Value("${ia.primera-entrevista.modelos:openrouter/free}")
+private String modelosPrimeraEntrevista;
+
+@Value("${ia.primera-entrevista.timeout:60000}")
+private int timeoutPrimeraEntrevista;
+
 
 
 
@@ -59,7 +74,7 @@ private String openrouterApiKey;
         factory.setConnectTimeout(5000);
 
         // lectura IA
-        factory.setReadTimeout(10000);
+        factory.setReadTimeout(30000);
 
         this.restTemplate = new RestTemplate(factory);
     }
@@ -68,282 +83,90 @@ private String openrouterApiKey;
     // IA PRINCIPAL
     // =========================================
 public String resumirObservacion(String texto) {
+    if (texto == null || texto.isBlank()) {
+        throw new IllegalArgumentException("No hay observaciones para resumir.");
+    }
+
+    if (groqApiKey == null || groqApiKey.isBlank()) {
+        throw new IllegalStateException("Falta configurar GROQ_API_KEY.");
+    }
+
+    // No registrar el contenido clínico en los logs.
+    String textoLimpio = texto.replaceAll("<[^>]*>", " ")
+            .replace("&nbsp;", " ")
+            .replaceAll("\\s+", " ").trim();
+
+    String prompt = """
+            Resumí la siguiente observación psicológica en una frase clínica breve.
+            Reglas:
+            - Máximo 6 palabras, cuando sea posible.
+            - No inventar diagnósticos, síntomas ni hechos.
+            - No convertir síntomas en diagnósticos.
+            - No añadir recomendaciones ni explicaciones.
+            - Responder solamente con el resumen.
+
+            Observación:
+            %s
+            """.formatted(textoLimpio);
+
+    HttpHeaders headers = new HttpHeaders();
+    headers.setBearerAuth(groqApiKey);
+    headers.setContentType(MediaType.APPLICATION_JSON);
+
+    Map<String, Object> body = Map.of(
+            "model", "openai/gpt-oss-20b",
+            "messages", List.of(Map.of("role", "user", "content", prompt)),
+            "temperature", 0,
+            "max_completion_tokens", 300,
+            "reasoning_effort", "low"
+    );
 
     try {
-
-        System.out.println("========== RESUMIR OBSERVACION ==========");
-
-        if (texto == null || texto.isBlank()) {
-
-            return "Sin observaciones clínicas.";
-        }
-
-        // =====================================
-        // LIMPIAR INPUT
-        // =====================================
-
-        texto = texto
-                .replace("\n", " ")
-                .replace("\r", " ")
-                .trim();
-
-        // =====================================
-        // PROMPT
-        // =====================================
-
-       String prompt = """
-Resumí clínicamente el siguiente texto.
-
-Reglas:
-- máximo 6 palabras
-- usar terminología psicológica real
-- no inventar diagnósticos
-- no convertir síntomas en diagnósticos formales
-- no agregar información
-- responder solo el resumen
-
-Texto:
-%s
-""".formatted(texto);
-       
-       
-        // =====================================
-        // HEADERS
-        // =====================================
-
-        HttpHeaders headers = new HttpHeaders();
-
-        headers.setBearerAuth(openrouterApiKey);
-
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
-        // =====================================
-        // BODY OPENROUTER
-        // =====================================
-
-        Map<String, Object> body = Map.of(
-
-            "model", "deepseek/deepseek-chat",
-
-            "messages", List.of(
-
-                Map.of(
-                    "role", "user",
-                    "content", prompt
-                )
-            ),
-
-            "temperature", 0,
-
-            "max_tokens", 20
-        );
-
-        // =====================================
-        // REQUEST
-        // =====================================
-
-        HttpEntity<Map<String, Object>> request =
-                new HttpEntity<>(body, headers);
-
-        // =====================================
-        // URL OPENROUTER
-        // =====================================
-
-        String url =
-                "https://openrouter.ai/api/v1/chat/completions";
-
-        System.out.println("ANTES DE OPENROUTER");
-
-        // =====================================
-        // REQUEST IA
-        // =====================================
-
-        ResponseEntity<Map> response =
-                restTemplate.postForEntity(
-                        url,
-                        request,
-                        Map.class
-                );
-
-        System.out.println("DESPUES DE OPENROUTER");
-
-        // =====================================
-        // VALIDAR BODY
-        // =====================================
+        ResponseEntity<Map> response = restTemplate.postForEntity(
+                "https://api.groq.com/openai/v1/chat/completions",
+                new HttpEntity<>(body, headers), Map.class);
 
         if (response.getBody() == null) {
-
-            throw new RuntimeException(
-                    "Respuesta IA vacía"
-            );
+            throw new IllegalStateException("Groq devolvió una respuesta vacía.");
+        }
+        Object choicesObj = response.getBody().get("choices");
+        if (!(choicesObj instanceof List<?> choices) || choices.isEmpty()
+                || !(choices.get(0) instanceof Map<?, ?> choice)
+                || !(choice.get("message") instanceof Map<?, ?> message)) {
+            throw new IllegalStateException("Groq devolvió una estructura inesperada.");
         }
 
-        // =====================================
-        // EXTRAER RESPUESTA
-        // =====================================
-
-        Object choicesObj =
-                response.getBody().get("choices");
-
-        if (choicesObj == null) {
-
-            throw new RuntimeException(
-                    "IA sin choices"
-            );
+        Object contentObj = message.get("content");
+        if (!(contentObj instanceof String contenido) || contenido.isBlank()) {
+            System.err.println("Groq devolvió contenido vacío. finish_reason="
+                    + choice.get("finish_reason"));
+            throw new IllegalStateException("Groq no produjo un resumen visible.");
         }
 
-        List<Map<String, Object>> choices =
-                (List<Map<String, Object>>) choicesObj;
-
-        if (choices.isEmpty()) {
-
-            throw new RuntimeException(
-                    "IA vacía"
-            );
-        }
-
-        Map<String, Object> choice =
-                choices.get(0);
-
-        Map<String, Object> message =
-                (Map<String, Object>) choice.get("message");
-
-        if (message == null) {
-
-            throw new RuntimeException(
-                    "IA sin message"
-            );
-        }
-
-        Object contentObj =
-                message.get("content");
-
-        if (contentObj == null) {
-
-            throw new RuntimeException(
-                    "IA sin content"
-            );
-        }
-
-        String resumen =
-                contentObj.toString().trim();
-
-        System.out.println("RESPUESTA CRUDA OPENROUTER:");
-        System.out.println(resumen);
-
-        // =====================================
-        // LIMPIEZA
-        // =====================================
-
-        resumen = resumen
-                .replace("\"", "")
+        String resumen = contenido.trim()
+                .replaceAll("(?i)^resumen(?: clínico)?:\\s*", "")
                 .replace("*", "")
-                .replace("-", "")
-                .replace("Resumen:", "")
-                .replace("Resumen clínico:", "")
+                .replace("\"", "")
                 .trim();
 
-        // =====================================
-        // PRIMERA LINEA
-        // =====================================
-
         if (resumen.contains("\n")) {
-
-            resumen =
-                    resumen.split("\n")[0]
-                            .trim();
+            resumen = resumen.split("\n", 2)[0].trim();
         }
-
-        // =====================================
-        // VALIDAR RESPUESTAS MALAS
-        // =====================================
-
-        String resumenLower =
-                resumen.toLowerCase();
-
-        if (resumen.length() < 4) {
-
-            resumen =
-                    "Resumen clínico no disponible.";
+        if (resumen.isBlank()) {
+            throw new IllegalStateException("Groq devolvió un resumen vacío.");
         }
-
-        if (
-
-            resumenLower.contains("artículo") ||
-            resumenLower.contains("investigación") ||
-            resumenLower.contains("tratamiento") ||
-            resumenLower.contains("terapia") ||
-            resumenLower.contains("ayuda profesional")
-
-        ) {
-
-            resumen =
-                    "Resumen clínico no disponible.";
+        if (resumen.equalsIgnoreCase(textoLimpio)) {
+            throw new IllegalStateException("Groq no sintetizó la observación.");
         }
-
-        // =====================================
-        // EVITAR COPIA EXACTA
-        // =====================================
-
-        String textoLower = texto.toLowerCase();
-
-        if (
-
-            !resumenLower.isBlank()
-
-            &&
-
-            resumenLower.equals(textoLower)
-
-        ) {
-
-            resumen =
-                    "Síntesis clínica no concluyente.";
-        }
-
-        // =====================================
-        // LIMITAR PALABRAS
-        // =====================================
-
-        if (resumen.split(" ").length > 10) {
-
-            resumen = String.join(
-                    " ",
-                    resumen.split(" ", 10)
-            );
-        }
-
-        // =====================================
-        // PUNTO FINAL
-        // =====================================
-
         if (!resumen.endsWith(".")) {
-
             resumen += ".";
         }
-
-        // =====================================
-        // VALIDAR VACIO
-        // =====================================
-
-        if (resumen.isBlank()) {
-
-            resumen =
-                    "Resumen clínico no disponible.";
-        }
-
-        System.out.println("RESUMEN IA FINAL:");
-        System.out.println(resumen);
-
         return resumen;
-
-    } catch (Exception e) {
-
-        System.out.println("========== ERROR resumirObservacion ==========");
-
-        e.printStackTrace();
-
-        return "Resumen clínico no disponible.";
+    } catch (org.springframework.web.client.HttpStatusCodeException e) {
+        // No imprimir la respuesta completa: podría contener información sensible.
+        System.err.println("Error HTTP de Groq: " + e.getStatusCode());
+        throw new IllegalStateException("Groq no pudo generar el resumen (HTTP "
+                + e.getStatusCode().value() + ").", e);
     }
 }
 
@@ -426,70 +249,208 @@ Texto:
         }
     }
 
-public String generarHistoriaClinica(
-        List<Visita> visitas
+public String generarHistoriaClinica(List<Visita> visitas) {
+    if (visitas == null || visitas.isEmpty()) {
+        throw new IllegalStateException("No hay visitas clínicas registradas.");
+    }
+
+    String texto = visitas.stream()
+            .map(Visita::getObservacion)
+            .filter(v -> v != null && !v.isBlank())
+            .map(v -> v.replaceAll("<[^>]*>", " ")
+                    .replace("&nbsp;", " ")
+                    .replaceAll("\\s+", " ").trim())
+            .reduce("", (a, b) -> a + "\n" + b).trim();
+
+    if (texto.isBlank()) {
+        throw new IllegalStateException("Las visitas no contienen observaciones clínicas.");
+    }
+
+    String prompt = """
+            Elaborá un BORRADOR de historia clínica psicológica, basado EXCLUSIVAMENTE
+            en los registros de visitas que siguen.
+            - No inventes hechos, diagnósticos, medicación ni evaluaciones de riesgo.
+            - No atribuyas al paciente datos que no estén explícitos.
+            - Si falta información, no la completes por inferencia.
+            - Usá lenguaje clínico profesional, sin viñetas.
+            - Resumí la evolución y los aspectos relevantes; máximo 250 palabras.
+            - Respondé solamente con el borrador, para revisión del profesional.
+
+            Visitas:
+            %s
+            """.formatted(texto);
+
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_JSON);
+    headers.setBearerAuth(openrouterApiKey);
+
+    SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+    factory.setConnectTimeout(10000);
+    factory.setReadTimeout(timeoutPrimeraEntrevista);
+    RestTemplate clienteHistoria = new RestTemplate(factory);
+
+    Exception ultimoError = null;
+    for (String modelo : modelosHistoriaClinica.split(",")) {
+        modelo = modelo.trim();
+        if (modelo.isEmpty()) continue;
+        try {
+            Map<String, Object> body = Map.of(
+                    "model", modelo,
+                    "messages", List.of(Map.of("role", "user", "content", prompt)),
+                    "temperature", 0.2,
+                    "max_tokens", 1200
+            );
+            ResponseEntity<Map> response = clienteHistoria.postForEntity(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    new HttpEntity<>(body, headers), Map.class);
+
+            if (response.getBody() == null) {
+                throw new IllegalStateException("Respuesta vacía del proveedor");
+            }
+            Object choicesObj = response.getBody().get("choices");
+            if (!(choicesObj instanceof List<?> choices) || choices.isEmpty()
+                    || !(choices.get(0) instanceof Map<?, ?> choice)
+                    || !(choice.get("message") instanceof Map<?, ?> message)
+                    || !(message.get("content") instanceof String contenido)
+                    || contenido.isBlank()) {
+                throw new IllegalStateException("Respuesta sin texto utilizable");
+            }
+            String borrador = contenido.trim();
+            if (borrador.isBlank()) {
+                throw new IllegalStateException("Borrador vacío");
+            }
+            return borrador;
+        } catch (Exception e) {
+            ultimoError = e;
+            // No registrar respuestas del proveedor ni contenido clínico.
+            String codigo = e instanceof org.springframework.web.client.HttpStatusCodeException httpError
+                    ? " HTTP " + httpError.getStatusCode().value() : "";
+            System.err.println("Falló borrador de historia clínica con modelo " + modelo
+                    + ": " + e.getClass().getSimpleName() + codigo);
+        }
+    }
+    throw new IllegalStateException(
+            "No se pudo generar la historia clínica con IA. Se conservó el contenido anterior.",
+            ultimoError);
+}
+// =========================================
+// ORGANIZAR PRIMERA ENTREVISTA
+// =========================================
+
+public Map<String, String> organizarPrimeraEntrevista(
+        String texto
 ) {
 
     try {
 
-        if (
-                visitas == null ||
-                visitas.isEmpty()
-        ) {
+        System.out.println(
+                "========== ORGANIZAR PRIMERA ENTREVISTA =========="
+        );
 
-            return "Sin registros clínicos.";
+        if (texto == null || texto.isBlank()) {
+
+            return Map.of();
         }
 
-        // =====================================
-        // CONCATENAR OBSERVACIONES
-        // =====================================
-
-        String texto = visitas.stream()
-
-                .map(Visita::getObservacion)
-
-                .filter(v ->
-                        v != null &&
-                        !v.isBlank()
-                )
-
-                .map(v ->
-
-                        v.replaceAll("<[^>]*>", " ")
-                         .replace("&nbsp;", " ")
-                         .replaceAll("\\s+", " ")
-                         .trim()
-                )
-
-                .reduce(
-                        "",
-                        (a, b) -> a + "\n" + b
-                );
-
-        if (texto.isBlank()) {
-
-            return "Sin contenido clínico.";
-        }
+        texto = texto
+                .replace("\n", " ")
+                .replace("\r", " ")
+                .trim();
 
         // =====================================
         // PROMPT
         // =====================================
 
         String prompt = """
-Generá una historia clínica psicológica profesional
-basada EXCLUSIVAMENTE en las siguientes visitas.
+Organizá la siguiente transcripción de una primera entrevista psicológica
+dentro de los campos indicados.
 
-Reglas:
-- no inventar diagnósticos
-- no agregar medicación
-- usar lenguaje clínico profesional
-- resumir evolución emocional y conductual
-- detectar patrones relevantes
-- máximo 250 palabras
-- redactar como informe clínico
-- no usar viñetas
+IMPORTANTE:
+- Trabajá EXCLUSIVAMENTE con la información explícitamente presente en la transcripción.
+- No inventes información.
+- No realices diagnósticos.
+- No realices interpretaciones clínicas.
+- No supongas información que no fue mencionada.
+- No completes campos por inferencia.
+- Si un dato no fue mencionado, devolver "".
+- En SEGURIDAD Y RIESGO solamente colocar información explícitamente mencionada.
+- Conservá el sentido de lo expresado por la persona.
+- Podés corregir errores propios de la transcripción automática.
+- No agregues explicaciones.
+- No agregues campos nuevos.
+- Respondé ÚNICAMENTE con un objeto JSON válido.
+- Todos los valores deben ser cadenas de texto.
+- No utilices markdown.
+- No utilices ```json.
+- No escribas texto antes ni después del JSON.
 
-Visitas:
+CAMPOS:
+
+nombre_completo
+edad
+fecha_nacimiento
+dni
+direccion_actual
+telefono
+contacto_emergencia
+parentesco
+telefono_emergencia
+estudios_previos
+ocupacion_actual
+estado_civil
+derivado_por
+
+tratamientos_anteriores
+tratamiento_farmacologico_psiquiatrico
+medicacion_psicotropica_actual
+historial_internaciones_urgencias
+balance_tratamientos_anteriores
+
+motivo_principal
+hecho_reciente
+expectativas
+
+inicio_evolucion
+situacion_desencadenante
+sintomas
+frecuencia_intensidad
+momentos_empeoramiento
+pensamiento
+emocion
+conducta
+impacto_funcional
+estrategias_afrontamiento
+
+antecedentes_familiares
+enfermedades_medicas_cronicas
+chequeos
+medicacion
+
+composicion_familiar_actual
+familia_origen
+dinamica_relacional_historia_familiar
+tiene_pareja
+tiempo_pareja
+descripcion_relacion_pareja
+tiene_hijos
+cantidad_hijos
+edades_nombres_vinculo_hijos
+red_apoyo
+
+horas_sueno
+calidad_sueno
+alimentacion
+consumo_sustancias
+actividad_fisica
+actividades_recreativas
+frecuencia_actividades_recreativas
+vida_social
+
+ideacion_pensamientos_dano
+capacidad_mantenerse_a_salvo
+
+TRANSCRIPCIÓN:
+
 %s
 """.formatted(texto);
 
@@ -500,106 +461,195 @@ Visitas:
         HttpHeaders headers =
                 new HttpHeaders();
 
+        headers.setBearerAuth(openrouterApiKey);
+
         headers.setContentType(
                 MediaType.APPLICATION_JSON
         );
 
-        headers.setBearerAuth(openrouterApiKey);
+        // La lista puede contener modelos separados por comas.
+        List<String> modelos = Arrays.stream(modelosPrimeraEntrevista.split(","))
+                .map(String::trim)
+                .filter(m -> !m.isEmpty())
+                .toList();
 
-        // =====================================
-        // BODY OPENROUTER
-        // =====================================
+        if (modelos.isEmpty()) {
+            throw new IllegalStateException("No hay modelos de primera entrevista configurados");
+        }
 
-        Map<String, Object> body = Map.of(
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10000);
+        factory.setReadTimeout(timeoutPrimeraEntrevista);
+        RestTemplate clienteEntrevista = new RestTemplate(factory);
 
-                "model", "deepseek/deepseek-chat",
+        com.fasterxml.jackson.databind.ObjectMapper mapper =
+                new com.fasterxml.jackson.databind.ObjectMapper();
+        Exception ultimoError = null;
+        Map<String, String> resultado = null;
 
-                "messages", List.of(
-
-                        Map.of(
-                                "role", "user",
-                                "content", prompt
-                        )
-                ),
-
-                "temperature", 0.3,
-
-                "max_tokens", 300
-        );
-
-        HttpEntity<Map<String, Object>> request =
-                new HttpEntity<>(
-                        body,
-                        headers
+        for (String modelo : modelos) {
+            try {
+                Map<String, Object> body = Map.of(
+                        "model", modelo,
+                        "messages", List.of(Map.of("role", "user", "content", prompt)),
+                        "temperature", 0,
+                        "max_tokens", 3500
                 );
 
-        // =====================================
-        // REQUEST
-        // =====================================
-        ResponseEntity<Map> response =
-        restTemplate.postForEntity(
-                "https://openrouter.ai/api/v1/chat/completions",
-                request,
-                Map.class
+                ResponseEntity<Map> response = clienteEntrevista.postForEntity(
+                        "https://openrouter.ai/api/v1/chat/completions",
+                        new HttpEntity<>(body, headers), Map.class);
+
+                if (response.getBody() == null) {
+                    throw new IllegalStateException("Respuesta vacía");
+                }
+                Object choicesObj = response.getBody().get("choices");
+                if (!(choicesObj instanceof List<?> choices) || choices.isEmpty()
+                        || !(choices.get(0) instanceof Map<?, ?> choice)
+                        || !(choice.get("message") instanceof Map<?, ?> message)
+                        || !(message.get("content") instanceof String contenido)) {
+                    throw new IllegalStateException("Respuesta sin contenido válido");
+                }
+
+                // Algunos modelos agregan una introducción (por ejemplo, "Here is...")
+                // o cercos Markdown. Extraer un objeto JSON completo sin alterar
+                // el contenido de las cadenas, que pueden contener llaves o comillas.
+                com.fasterxml.jackson.databind.JsonNode node =
+                        extraerObjetoJsonEntrevista(contenido, mapper);
+                if (!node.isObject()) {
+                    throw new IllegalStateException("La respuesta no es un objeto JSON");
+                }
+
+                // Exigir campos conocidos y valores de texto; evitar respuestas vacías
+                // que parezcan exitosas. No inventar datos faltantes.
+                String[] campos = {
+                    "nombre_completo", "edad", "fecha_nacimiento", "dni",
+                    "direccion_actual", "telefono", "contacto_emergencia",
+                    "parentesco", "telefono_emergencia", "estudios_previos",
+                    "ocupacion_actual", "estado_civil", "derivado_por",
+                    "tratamientos_anteriores", "tratamiento_farmacologico_psiquiatrico",
+                    "medicacion_psicotropica_actual", "historial_internaciones_urgencias",
+                    "balance_tratamientos_anteriores", "motivo_principal",
+                    "hecho_reciente", "expectativas", "inicio_evolucion",
+                    "situacion_desencadenante", "sintomas", "frecuencia_intensidad",
+                    "momentos_empeoramiento", "pensamiento", "emocion", "conducta",
+                    "impacto_funcional", "estrategias_afrontamiento",
+                    "antecedentes_familiares", "enfermedades_medicas_cronicas",
+                    "chequeos", "medicacion", "composicion_familiar_actual",
+                    "familia_origen", "dinamica_relacional_historia_familiar",
+                    "tiene_pareja", "tiempo_pareja", "descripcion_relacion_pareja",
+                    "tiene_hijos", "cantidad_hijos", "edades_nombres_vinculo_hijos",
+                    "red_apoyo", "horas_sueno", "calidad_sueno", "alimentacion",
+                    "consumo_sustancias", "actividad_fisica", "actividades_recreativas",
+                    "frecuencia_actividades_recreativas", "vida_social",
+                    "ideacion_pensamientos_dano", "capacidad_mantenerse_a_salvo"
+                };
+                Map<String, String> candidato = new LinkedHashMap<>();
+                boolean tieneDatos = false;
+                for (String campo : campos) {
+                    com.fasterxml.jackson.databind.JsonNode valor = node.get(campo);
+                    if (valor != null && !valor.isNull() && !valor.isTextual()) {
+                        throw new IllegalStateException("Valor no textual: " + campo);
+                    }
+                    String dato = valor == null || valor.isNull() ? "" : valor.asText();
+                    candidato.put(campo, dato);
+                    if (!dato.isBlank()) tieneDatos = true;
+                }
+                if (!tieneDatos) {
+                    throw new IllegalStateException("La IA no clasificó ningún dato");
+                }
+                resultado = candidato;
+                break;
+            } catch (Exception error) {
+                ultimoError = error;
+                System.err.println("Falló modelo de entrevista " + modelo
+                        + ": " + error.getClass().getSimpleName());
+            }
+        }
+        if (resultado == null) {
+            throw new IllegalStateException(
+                    "Ningún modelo pudo organizar la entrevista", ultimoError);
+        }
+
+        System.out.println(
+                "ENTREVISTA ORGANIZADA CORRECTAMENTE"
         );
 
-        if (response.getBody() == null) {
-
-            return "No se pudo generar historia clínica.";
-        }
-
-        // =====================================
-        // EXTRAER RESPUESTA
-        // =====================================
-
-        List<Map<String, Object>> choices =
-                (List<Map<String, Object>>)
-                        response.getBody().get("choices");
-
-        if (
-                choices == null ||
-                choices.isEmpty()
-        ) {
-
-            return "Sin respuesta IA.";
-        }
-
-        Map<String, Object> message =
-                (Map<String, Object>)
-                        choices.get(0).get("message");
-
-        String resumen =
-                message.get("content")
-                        .toString()
-                        .trim();
-
-        // =====================================
-        // LIMPIEZA
-        // =====================================
-
-        resumen = resumen
-
-                .replace("*", "")
-
-                .replace("#", "")
-
-                .replaceAll("\\s+", " ")
-
-                .trim();
-
-        if (!resumen.endsWith(".")) {
-
-            resumen += ".";
-        }
-
-        return resumen;
+        return resultado;
 
     } catch (Exception e) {
 
+        System.out.println(
+                "========== ERROR ORGANIZANDO ENTREVISTA =========="
+        );
+
         e.printStackTrace();
 
-        return "No se pudo generar historia clínica.";
+        throw new RuntimeException(
+                "No se pudo organizar la primera entrevista",
+                e
+        );
     }
 }
+
+    /**
+     * Encuentra un objeto JSON válido dentro de una respuesta con texto adicional.
+     * Respeta comillas y escapes para no cortar un JSON que incluya llaves en valores.
+     * No registra el contenido clínico en logs.
+     */
+    private com.fasterxml.jackson.databind.JsonNode extraerObjetoJsonEntrevista(
+            String contenido,
+            com.fasterxml.jackson.databind.ObjectMapper mapper) throws Exception {
+
+        if (contenido == null || contenido.isBlank()) {
+            throw new IllegalStateException("La IA devolvió contenido vacío");
+        }
+
+        for (int inicio = 0; inicio < contenido.length(); inicio++) {
+            if (contenido.charAt(inicio) != '{') {
+                continue;
+            }
+
+            int profundidad = 0;
+            boolean enCadena = false;
+            boolean escapado = false;
+
+            for (int i = inicio; i < contenido.length(); i++) {
+                char c = contenido.charAt(i);
+                if (enCadena) {
+                    if (escapado) {
+                        escapado = false;
+                    } else if (c == '\\') {
+                        escapado = true;
+                    } else if (c == '"') {
+                        enCadena = false;
+                    }
+                    continue;
+                }
+                if (c == '"') {
+                    enCadena = true;
+                } else if (c == '{') {
+                    profundidad++;
+                } else if (c == '}') {
+                    profundidad--;
+                    if (profundidad == 0) {
+                        String candidato = contenido.substring(inicio, i + 1);
+                        try {
+                            com.fasterxml.jackson.databind.JsonNode node =
+                                    mapper.readTree(candidato);
+                            if (node != null && node.isObject()) {
+                                return node;
+                            }
+                        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
+                            // Buscar el siguiente posible objeto sin exponer datos.
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        throw new IllegalStateException(
+                "La IA no devolvió un objeto JSON válido y completo");
+    }
 
 }

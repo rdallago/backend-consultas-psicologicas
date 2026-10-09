@@ -98,26 +98,58 @@ public class HistoriaClinicaService {
     }
 
     public HistoriaClinica generarResumenClinico(Long historiaId) {
-        HistoriaClinica historia = historiaRepo.findById(historiaId)
-                .orElseThrow(() -> new RuntimeException("Historia clínica inexistente"));
 
-        List<Visita> visitas = visitaRepo.findByHistoriaId(historiaId);
+    HistoriaClinica historia = historiaRepo.findById(historiaId)
+            .orElseThrow(() ->
+                    new RuntimeException("Historia clínica inexistente"));
 
-        if (visitas == null || visitas.isEmpty()) {
-            historia.setResumenClinico("El paciente no posee visitas clínicas registradas.");
-            return historiaRepo.save(historia);
-        }
+    List<Visita> visitas = visitaRepo.findByHistoriaId(historiaId);
 
-        String resumen = iaService.generarHistoriaClinica(visitas);
-
-        if (resumen == null || resumen.isBlank()) {
-            resumen = "No se pudo generar historia clínica.";
-        }
-
-        historia.setResumenClinico(resumen);
-        return historiaRepo.save(historia);
+    if (visitas == null || visitas.isEmpty()) {
+        throw new IllegalStateException(
+                "No se puede generar la historia clínica: " +
+                "el paciente no posee visitas registradas."
+        );
     }
 
+    // Ordenar cronológicamente las entrevistas.
+    visitas.sort(
+            java.util.Comparator
+                    .comparing(
+                            Visita::getFecha,
+                            java.util.Comparator.nullsLast(
+                                    java.util.Comparator.naturalOrder()
+                            )
+                    )
+                    .thenComparing(
+                            Visita::getId,
+                            java.util.Comparator.nullsLast(
+                                    java.util.Comparator.naturalOrder()
+                            )
+                    )
+    );
+
+    String resumen = iaService.generarHistoriaClinica(visitas);
+
+    // No reemplazar una historia clínica por un mensaje de error.
+    if (resumen == null
+            || resumen.isBlank()
+            || resumen.equals("No se pudo generar historia clínica.")
+            || resumen.equals("Sin respuesta IA.")
+            || resumen.equals("Sin registros clínicos.")
+            || resumen.equals("Sin contenido clínico.")) {
+
+        throw new IllegalStateException(
+                "La IA no pudo generar la historia clínica. " +
+                "Se conservó el contenido anterior."
+        );
+    }
+
+    historia.setResumenClinico(resumen);
+
+    return historiaRepo.save(historia);
+}
+    
     public HistoriaClinica guardarResumenClinico(Long id, String resumen) {
         HistoriaClinica historia = historiaRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Historia inexistente"));
@@ -127,105 +159,72 @@ public class HistoriaClinicaService {
     }
 
 public byte[] generarPdfHistoriaClinica(Long id) {
-
+    HistoriaClinica historia = historiaRepo.findById(id)
+            .orElseThrow(() -> new RuntimeException("Historia clínica inexistente"));
     try {
-
-        HistoriaClinica historia = historiaRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Historia inexistente"));
-
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        Document document = new Document();
-        PdfWriter writer = PdfWriter.getInstance(document, baos);
-
-        document.open();
-
-        // =====================================
-        // LOGO CEREBRO
-        // =====================================
-        try {
-            Image logo = Image.getInstance(getClass().getResource("/static/brain.png"));
-            logo.scaleToFit(80, 80);
-            logo.setAlignment(Image.ALIGN_LEFT);
-            document.add(logo);
-        } catch (Exception e) {
-            System.out.println("No se pudo cargar brain.png");
-        }
-
-        // =====================================
-        // FUENTES
-        // =====================================
-        Font titulo = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 18, BaseColor.BLACK);
-        Font texto = FontFactory.getFont(FontFactory.HELVETICA, 12, BaseColor.BLACK);
-        Font encabezado = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14, BaseColor.BLACK);
-
-        // =====================================
-        // FECHA Y HORA
-        // =====================================
-        String fechaHora = LocalDateTime.now()
-                .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
-
-        // =====================================
-        // ENCABEZADO
-        // =====================================
-        document.add(new Paragraph("Gestión Psicológica", encabezado));
-        document.add(new Paragraph("Fecha de impresión: " + fechaHora, texto));
-        document.add(new Paragraph(" "));
-
-        // =====================================
-        // TITULO
-        // =====================================
-        document.add(new Paragraph("Historia Clínica", titulo));
-        document.add(new Paragraph(" "));
-
-        // =====================================
-        // PACIENTE
-        // =====================================
-        String paciente = historia.getPaciente().getNombre() + " " + historia.getPaciente().getApellido();
-        document.add(new Paragraph("Paciente: " + paciente, texto));
-        document.add(new Paragraph(" "));
-
-        // =====================================
-        // CONTENIDO HTML (QUILL + FIX)
-        // =====================================
-        String contenido = historia.getResumenClinico() != null
-                ? historia.getResumenClinico()
-                : "<p>Sin historia clínica.</p>";
-
-        // 🔥 LIMPIEZA DE QUILL
-        contenido = contenido
-                .replace("&nbsp;", " ")
-                .replaceAll("\\s+", " ")
-                .replace("<br>", "<br/>");
-
-        // 🔥 WRAPPER CON CSS GLOBAL (CLAVE PARA JUSTIFICADO)
-        contenido =
-                "<html>"
-              + "<head>"
-              + "<style>"
-              + "body { font-family: Helvetica; }"
-              + "p { text-align: justify; line-height: 1.4; }"
-              + "</style>"
-              + "</head>"
-              + "<body>"
-              + contenido
-              + "</body>"
-              + "</html>";
-
-        // =====================================
-        // PARSEO HTML → PDF
-        // =====================================
-        XMLWorkerHelper.getInstance().parseXHtml(
-                writer,
-                document,
-                new StringReader(contenido)
-        );
-
-        document.close();
-        return baos.toByteArray();
-
+        ByteArrayOutputStream salida = new ByteArrayOutputStream();
+        Document documento = PdfClinicoFormato.documento();
+        PdfWriter.getInstance(documento, salida);
+        documento.open();
+        String paciente = historia.getPaciente().getNombre() + " "
+                + historia.getPaciente().getApellido();
+        PdfClinicoFormato.cabecera(documento, "Historia Clínica Psicológica", paciente,
+                "Fecha de apertura: " + (historia.getFechaCreacion() == null
+                        ? "Sin fecha" : historia.getFechaCreacion().toString()));
+        PdfClinicoFormato.contenido(documento, historia.getResumenClinico());
+        documento.close();
+        return salida.toByteArray();
     } catch (Exception e) {
         e.printStackTrace();
-        throw new RuntimeException("Error generando PDF de historia clínica");
+        throw new RuntimeException("Error generando PDF de historia clínica", e);
     }
+}
+
+public String generarBorradorHistoriaClinica(Long historiaId) {
+
+    HistoriaClinica historia = historiaRepo.findById(historiaId)
+            .orElseThrow(() ->
+                    new RuntimeException("Historia clínica inexistente"));
+
+    List<Visita> visitas = visitaRepo.findByHistoriaId(historiaId);
+
+    if (visitas == null || visitas.isEmpty()) {
+        throw new IllegalStateException(
+                "El paciente no tiene entrevistas registradas."
+        );
+    }
+
+    visitas.sort(
+            java.util.Comparator
+                    .comparing(
+                            Visita::getFecha,
+                            java.util.Comparator.nullsLast(
+                                    java.util.Comparator.naturalOrder()
+                            )
+                    )
+                    .thenComparing(
+                            Visita::getId,
+                            java.util.Comparator.nullsLast(
+                                    java.util.Comparator.naturalOrder()
+                            )
+                    )
+    );
+
+    String borrador = iaService.generarHistoriaClinica(visitas);
+
+    if (borrador == null
+            || borrador.isBlank()
+            || borrador.equals("No se pudo generar historia clínica.")
+            || borrador.equals("Sin respuesta IA.")
+            || borrador.equals("Sin registros clínicos.")
+            || borrador.equals("Sin contenido clínico.")) {
+
+        throw new IllegalStateException(
+                "No se pudo generar el borrador. " +
+                "La historia clínica guardada no fue modificada."
+        );
+    }
+
+    return borrador;
 }
 }

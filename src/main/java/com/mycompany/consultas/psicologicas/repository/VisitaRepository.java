@@ -97,5 +97,7 @@ public interface VisitaRepository
     """)
     List<Visita> buscarPorFecha(LocalDate fecha);
     
+    boolean existsByHistoriaId(Long historiaId);
+
     boolean existsByHistoriaIdAndTipoVisita(Long historiaId, TipoVisita tipoVisita);
 }

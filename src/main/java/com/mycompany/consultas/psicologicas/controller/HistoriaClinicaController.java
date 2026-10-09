@@ -49,6 +49,27 @@ public HistoriaClinica generarResumen(
             .generarResumenClinico(id);
 }
 
+@PostMapping("/{id}/generar-borrador")
+public ResponseEntity<?> generarBorrador(
+        @PathVariable Long id) {
+
+    try {
+
+        String borrador =
+                historiaService.generarBorradorHistoriaClinica(id);
+
+        return ResponseEntity.ok(
+                Map.of("borrador", borrador)
+        );
+
+    } catch (Exception e) {
+
+        return ResponseEntity.badRequest().body(
+                Map.of("mensaje", e.getMessage())
+        );
+    }
+}
+
 //EndPoint Guardar
 @PutMapping("/{id}/guardar-resumen")
 public HistoriaClinica guardarResumen(

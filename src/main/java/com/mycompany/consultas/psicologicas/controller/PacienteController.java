@@ -11,7 +11,8 @@ package com.mycompany.consultas.psicologicas.controller;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
-
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import com.mycompany.consultas.psicologicas.model.Paciente;
 import com.mycompany.consultas.psicologicas.service.PacienteService;
 
@@ -35,8 +36,8 @@ public class PacienteController {
         return pacienteService.listar();
     }
 
-    @PostMapping
-    public Paciente guardar(@RequestBody Paciente p) {
+   @PostMapping
+    public Paciente guardar(@Valid @RequestBody Paciente p) {
         return pacienteService.guardar(p);
     }
 
@@ -48,10 +49,13 @@ public Paciente obtener(@PathVariable Long id) {
 
 
     @PutMapping("/{id}")
-    public Paciente actualizar(@PathVariable Long id, @RequestBody Paciente p) {
-        p.setId(id);
-        return pacienteService.guardar(p);
-    }
+public Paciente actualizar(
+        @PathVariable Long id,
+        @Valid @RequestBody Paciente p) {
+
+    p.setId(id);
+    return pacienteService.guardar(p);
+}
 
     @DeleteMapping("/{id}")
     public void eliminar(@PathVariable Long id) {
